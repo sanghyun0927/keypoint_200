@@ -24,7 +24,7 @@ class ContourPointsPredicter(ContourPointsLabeler):
         self.left_model_path = left_model_path
         self.right_model_path = right_model_path
 
-    def predict_idx(self, index, x_array, y_array):
+    def predict_idx(self, index, contour, hundred_idx, x_array, y_array):
         model_input = np.append(x_array, y_array).reshape((1, 400))
 
         model_L = xgboost.XGBRegressor()
@@ -33,11 +33,30 @@ class ContourPointsPredicter(ContourPointsLabeler):
         model_R = xgboost.XGBRegressor()
         model_R.load_model(self.right_model_path)
 
-        left_pred = model_L.predict(model_input)
-        right_pred = model_R.predict(model_input)
+        contour_left_ratio = model_L.predict(model_input) / self.aspect_ratio
+        left_height = contour_left_ratio * (
+                    contour[:, 1].max() - contour[:, 1].min() + 1) + contour[:, 1].min()
+        contour_right_ratio = model_R.predict(model_input) / self.aspect_ratio
+        right_height = contour_right_ratio * (
+                    contour[:, 1].max() - contour[:, 1].min() + 1) + contour[:, 1].min()
+        self.df.loc[index, 'left'] = left_height
+        self.df.loc[index, 'right'] = right_height
 
-        self.df.loc[index, ['left']] = int(round(left_pred[0]))
-        self.df.loc[index, ['right']] = int(round(right_pred[0]))
+        #
+        # ex_length_L = ex_length_R = 100000
+        # for idx, val in enumerate(contour[hundred_idx][101:]):
+        #     length_left = np.abs(left_height - val[1])
+        #     if ex_length_L > length_left:
+        #         ex_length_L = length_left
+        #         idx_left = idx + 101
+        # for idx, val in enumerate(contour[hundred_idx][:101]):
+        #     length_right = np.abs(right_height - val[1])
+        #     if ex_length_R > length_right:
+        #         ex_length_R = length_right
+        #         idx_right = idx
+        #
+        # self.df.loc[index, 'left'] = idx_left
+        # self.df.loc[index, 'right'] = idx_right
 
     def process_images(self, n, img_path: str, output_path: str):
         for index, self.file_name in tqdm(self.df['file'].iloc[n:].items()):
@@ -45,30 +64,30 @@ class ContourPointsPredicter(ContourPointsLabeler):
             self.xy_coordinate = []
 
             # Generate points of a semented boundary
-            contour = self.generate_contour(img_path)
+            contour = np.squeeze(self.generate_contour(img_path), axis=1)
 
             # get a hundred indexes from contour
             hundred_idx = np.rint(np.linspace(0, len(contour) - 1, 200)).astype('int16')
 
             #
-            x_array = (contour[hundred_idx, 0, 0].flatten() - contour[:, 0, 0].min()) / (
-                    contour[:, 0, 0].max() - contour[:, 0, 0].min() + 1)
-            y_array = (contour[hundred_idx, 0, 1].flatten() - contour[:, 0, 1].min()) / (
-                    contour[:, 0, 1].max() - contour[:, 0, 1].min() + 1) * self.aspect_ratio
+            x_array = (contour[hundred_idx, 0].flatten() - contour[:, 0].min()) / (
+                    contour[:, 0].max() - contour[:, 0].min() + 1)
+            y_array = (contour[hundred_idx, 1].flatten() - contour[:, 1].min()) / (
+                    contour[:, 1].max() - contour[:, 1].min() + 1) * self.aspect_ratio
 
             # predict indices of two points
-            self.predict_idx(index, x_array, y_array)
+            self.predict_idx(index, contour, hundred_idx, x_array, y_array)
 
             # write x feature (model input)
             self.df.loc[index, self.columns[4:404]] = np.append(x_array, y_array).reshape((1, 400))
             self.df.loc[index, ['contour_n']] = len(contour)
-            self.df.to_csv(output_path)
+        self.df.to_excel(output_path)
 
 
 if __name__ == '__main__':
 
     labeler = ContourPointsPredicter(excel_path='two_hundred_points.xlsx',
-                                     left_model_path="./xgb_model/outline_left_v0.4.model",
-                                     right_model_path="./xgb_model/outline_right_v0.4.model",
+                                     left_model_path="./xgb_model/outline_left_v0.3.model",
+                                     right_model_path="./xgb_model/outline_right_v0.3.model",
                                      )
-    labeler.process_images(1248, './segmented_images/', 'two_hundred_points.csv')
+    labeler.process_images(1565, './segmented_images/', 'two_hundred_points_v0.3_pred.xlsx')

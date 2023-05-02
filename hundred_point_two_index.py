@@ -44,13 +44,13 @@ class ContourPointsLabeler:
 
 
         for i in hundred_idx:
-            point = contour[i, 0, :]
+            point = contour[i, :]
             cv2.circle(self.image_np, point, 2, (255, 0, 255), -1)
 
         idx_left = hundred_idx[self.df.loc[index, 'left']]
         idx_right = hundred_idx[self.df.loc[index, 'right']]
-        cv2.circle(self.image_np, contour[idx_left, 0, :], 3, (0, 0, 255), -1)
-        cv2.circle(self.image_np, contour[idx_right, 0, :], 3, (0, 0, 255), -1)
+        cv2.circle(self.image_np, contour[idx_left, :], 3, (0, 0, 255), -1)
+        cv2.circle(self.image_np, contour[idx_right, :], 3, (0, 0, 255), -1)
 
         cv2.setMouseCallback("space", self.mouse_click_left_side)
         cv2.setMouseCallback("space", self.mouse_click_right_side)
@@ -65,18 +65,18 @@ class ContourPointsLabeler:
         if not self.xy_coordinate.__eq__([]):
             for idx, val in enumerate(contour[hundred_idx]):
                 length_left = np.sqrt(
-                    (self.xy_coordinate[1] - val[0, 1]) ** 2 + (self.xy_coordinate[0] - val[0, 0]) ** 2)
+                    (self.xy_coordinate[1] - val[1]) ** 2 + (self.xy_coordinate[0] - val[0]) ** 2)
                 length_right = np.sqrt(
-                    (self.xy_coordinate[3] - val[0, 1]) ** 2 + (self.xy_coordinate[2] - val[0, 0]) ** 2)
+                    (self.xy_coordinate[3] - val[1]) ** 2 + (self.xy_coordinate[2] - val[0]) ** 2)
                 if ex_length_L > length_left:
                     ex_length_L = length_left
                     idx_left = idx
                 if ex_length_R > length_right:
                     ex_length_R = length_right
                     idx_right = idx
-                self.df.loc[index, 'file'] = self.file_name
-                self.df.loc[index, 'left'] = idx_left
-                self.df.loc[index, 'right'] = idx_right
+
+            self.df.loc[index, 'left'] = idx_left
+            self.df.loc[index, 'right'] = idx_right
 
     def generate_contour(self, img_path):
         foreground = cv2.imread(os.path.join(img_path, self.file_name), cv2.IMREAD_UNCHANGED)
@@ -102,17 +102,17 @@ class ContourPointsLabeler:
             self.xy_coordinate = []
 
             # Generate points of a semented boundary
-            contour = self.generate_contour(img_path)
+            contour = np.squeeze(self.generate_contour(img_path), axis=1)
 
             # get a hundred indexes from contour
             hundred_idx = np.rint(np.linspace(0, len(contour) - 1, 200)).astype('int16')
-            # self.get_label_idx(index, contour, hundred_idx)
+            self.get_label_idx(index, contour, hundred_idx)
 
             #
-            x_array = (contour[hundred_idx, 0, 0].flatten() - contour[:, 0, 0].min()) / (
-                    contour[:, 0, 0].max() - contour[:, 0, 0].min() + 1)
-            y_array = (contour[hundred_idx, 0, 1].flatten() - contour[:, 0, 1].min()) / (
-                    contour[:, 0, 1].max() - contour[:, 0, 1].min() + 1) * self.aspect_ratio
+            x_array = (contour[hundred_idx, 0].flatten() - contour[:, 0].min()) / (
+                    contour[:, 0].max() - contour[:, 0].min() + 1)
+            y_array = (contour[hundred_idx, 1].flatten() - contour[:, 1].min()) / (
+                    contour[:, 1].max() - contour[:, 1].min() + 1) * self.aspect_ratio
             self.df.loc[index, self.columns[4:404]] = np.append(x_array, y_array).reshape((1, 400))
             self.df.loc[index, ['contour_n']] = len(contour)
         self.df.to_excel(output_path)
